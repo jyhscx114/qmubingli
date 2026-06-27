@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>病理切片刷题系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ========== 加载/模式选择界面 ========== */
+  .loading-screen {
+    background: white;
+    border-radius: 16px;
+    padding: 25px 20px;
+    margin: 15px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+    text-align: center;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .loading-screen h1 {
+    color: #333;
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+  .loading-screen .subtitle {
+    color: #888;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .progress-container {
+    width: 100%;
+    background: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 15px 0;
+  }
+  .progress-bar {
+    height: 10px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .mode-panel {
+    margin: 20px 0;
+    text-align: left;
+  }
+  .mode-title {
+    font-size: 15px;
+    color: #333;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .mode-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .mode-btn {
+    flex: 1;
+    min-width: 140px;
+    padding: 14px 10px;
+    border: 2px solid #e0e0e0;
+    background: #f8f9ff;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    font-family: inherit;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  .mode-btn .mode-icon { font-size: 28px; display: block; margin-bottom: 5px; }
+  .mode-btn:hover:not(:disabled) {
+    border-color: #667eea;
+    background: #f0e6ff;
+  }
+  .mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #loadStatus { color: #667eea; margin: 10px 0; font-size: 14px; font-weight: 600; }
+  #loadStatus.error { color: #c0392b; }
+
+  /* ========== 答题界面 - 一屏显示 ========== */
+  .quiz-screen {
+    background: white;
+    border-radius: 16px;
+    padding: 12px;
+    margin: 10px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+    display: none;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+    min-height: calc(100vh - 20px);
+  }
+  .quiz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .quiz-title { font-size: 16px; color: #333; font-weight: bold; }
+  .quiz-progress { color: #667eea; font-weight: bold; font-size: 13px; }
+  .quiz-stats { color: #27ae60; font-size: 13px; margin-left: 8px; }
+
+  /* 图片容器 - 限制高度确保一屏显示 */
+  .image-container {
+    background: #f8f9ff;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+    text-align: center;
+    cursor: zoom-in;
+    max-height: 35vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .image-container canvas, .image-container img {
+    max-width: 100%;
+    max-height: 32vh;
+    border-radius: 6px;
+    cursor: zoom-in;
+    object-fit: contain;
+  }
+  .image-hint { color: #999; font-size: 11px; margin-top: 5px; }
+
+  .question-text {
+    font-size: 15px;
+    color: #333;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  /* 选项 - 单列更紧凑 */
+  .options-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .option-btn {
+    padding: 12px 14px;
+    background: #f8f9ff;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+    color: #333;
+    transition: all 0.2s;
+    font-family: inherit;
+    width: 100%;
+  }
+  .option-btn:active:not(:disabled) {
+    border-color: #667eea;
+    background: #f0e6ff;
+  }
+  .option-btn.correct {
+    background: #d4edda;
+    border-color: #27ae60;
+    color: #155724;
+  }
+  .option-btn.wrong {
+    background: #f8d7da;
+    border-color: #c0392b;
+    color: #721c24;
+  }
+  .option-btn:disabled { cursor: not-allowed; }
+  .option-label { font-weight: bold; color: #667eea; margin-right: 6px; }
+
+  /* 解析框 */
+  .explanation-box {
+    background: #fff8e1;
+    border-left: 4px solid #f39c12;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    display: none;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .explanation-box.show { display: block; }
+  .explanation-title { font-weight: bold; color: #e67e22; margin-bottom: 4px; }
+  .explanation-content { color: #555; }
+
+  .quiz-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* 按钮 */
+  .btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary {
+    background: #e0e0e0;
+    color: #333;
+  }
+  .btn-secondary:active { background: #d0d0d0; }
+
+  /* ========== 结果界面 ========== */
+  .result-screen {
+    background: white;
+    border-radius: 16px;
+    padding: 25px 20px;
+    margin: 15px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+    text-align: center;
+    display: none;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .result-screen h2 { font-size: 24px; color: #333; margin-bottom: 15px; }
+  .score-display { font-size: 48px; font-weight: bold; margin: 15px 0; }
+  .score-display.excellent { color: #27ae60; }
+  .score-display.good { color: #f39c12; }
+  .score-display.poor { color: #c0392b; }
+  .result-stats { color: #555; font-size: 15px; margin-bottom: 20px; line-height: 1.7; }
+
+  /* 图片放大弹窗 */
+  .image-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.92);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    cursor: zoom-out;
+  }
+  .image-modal.show { display: flex; }
+  .image-modal canvas, .image-modal img {
+    max-width: 95%;
+    max-height: 95%;
+    border-radius: 8px;
+  }
+  .modal-close {
+    position: absolute;
+    top: 15px; right: 20px;
+    color: white;
+    font-size: 40px;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1;
+  }
+
+  /* 桌面端增强 */
+  @media (min-width: 768px) {
+    .quiz-screen { padding: 20px; }
+    .quiz-title { font-size: 20px; }
+    .image-container { max-height: 40vh; }
+    .image-container canvas { max-height: 38vh; }
+    .question-text { font-size: 18px; }
+    .options-container { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .option-btn { padding: 14px 16px; font-size: 15px; }
+    .btn { padding: 12px 24px; font-size: 15px; }
+    .mode-btn { padding: 20px 15px; font-size: 16px; }
+    .loading-screen h1 { font-size: 28px; }
+  }
+
+  /* 小屏幕（iPhone SE 等）更紧凑 */
+  @media (max-height: 700px) {
+    .quiz-screen { padding: 8px; min-height: calc(100vh - 16px); border-radius: 12px; }
+    .image-container { max-height: 28vh; padding: 8px; margin-bottom: 8px; }
+    .image-container canvas { max-height: 25vh; }
+    .question-text { font-size: 13px; margin-bottom: 6px; }
+    .option-btn { padding: 9px 11px; font-size: 13px; }
+    .options-container { gap: 6px; }
+    .explanation-box { padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ========== 加载/模式选择界面 ========== -->
+  <div class="loading-screen" id="loadingScreen">
+    <h1>🔬 病理切片刷题系统</h1>
+    <div class="subtitle">44 种病理 · 70 张切片图片</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="loadProgressBar"></div>
+    </div>
+    <div id="loadStatus">准备中...</div>
+    <div class="mode-panel" id="modePanel" style="display:none;">
+      <div class="mode-title">📋 请选择刷题模式</div>
+      <div class="mode-buttons">
+        <button class="mode-btn" id="modeInfinite">
+          <span class="mode-icon">♾️</span>
+          无限随机<br><small style="font-weight:normal;color:#888;">一题接一题，累计正确率</small>
+        </button>
+        <button class="mode-btn" id="modeTen">
+          <span class="mode-icon">🎯</span>
+          10 题挑战<br><small style="font-weight:normal;color:#888;">固定 10 题后出报告</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 答题界面 ========== -->
+  <div class="quiz-screen" id="quizScreen">
+    <div class="quiz-header">
+      <div class="quiz-title">🔬 病理识别</div>
+      <div>
+        <span class="quiz-progress" id="progressText">第 1 题</span>
+        <span class="quiz-stats" id="statsText">正确: 0</span>
+      </div>
+    </div>
+
+    <div class="image-container" id="imageContainer">
+      <canvas id="questionCanvas"></canvas>
+    </div>
+
+    <div class="question-text">观察切片，选择正确诊断：</div>
+
+    <div class="options-container" id="optionsContainer"></div>
+
+    <div class="explanation-box" id="explanationBox">
+      <div class="explanation-title">📝 答案</div>
+      <div class="explanation-content" id="explanationContent"></div>
+    </div>
+
+    <div class="quiz-footer">
+      <button class="btn btn-secondary" id="backBtn">← 换模式</button>
+      <button class="btn btn-primary" id="nextBtn" style="display:none;">下一题 →</button>
+    </div>
+  </div>
+
+  <!-- ========== 结果界面 ========== -->
+  <div class="result-screen" id="resultScreen">
+    <h2>🎉 答题报告</h2>
+    <div class="score-display" id="scoreDisplay">0 / 0</div>
+    <div class="result-stats" id="resultStats"></div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="restartBtn">🔄 再来一轮</button>
+      <button class="btn btn-secondary" id="changeModeBtn">↩️ 换模式</button>
+    </div>
+  </div>
+
+  <!-- 图片放大弹窗 -->
+  <div class="image-modal" id="imageModal">
+    <span class="modal-close" id="modalClose">&times;</span>
+    <canvas id="modalCanvas"></canvas>
+  </div>
+
+<script>
+const PATHOLOGY_LIST = [
+  { name: 'CIN3级', count: 1 },
+  { name: '乙脑', count: 1 },
+  { name: '乳腺纤维腺瘤', count: 1 },
+  { name: '冠状动脉粥样硬化症', count: 2 },
+  { name: '多形性横纹肌肉瘤', count: 1 },
+  { name: '大叶性肺炎', count: 2 },
+  { name: '子宫平滑肌瘤', count: 1 },
+  { name: '小叶性肺炎', count: 2 },
+  { name: '尖锐湿疣', count: 2 },
+  { name: '平滑肌瘤伴玻璃样变', count: 2 },
+  { name: '异物性肉芽肿', count: 1 },
+  { name: '心肌梗死', count: 2 },
+  { name: '急性弥漫性增生性肾小球肾炎', count: 1 },
+  { name: '急性普通型肝炎', count: 2 },
+  { name: '慢性宫颈炎伴腺体鳞化', count: 2 },
+  { name: '慢性支气管炎', count: 3 },
+  { name: '慢性硬化性肾小球肾炎', count: 2 },
+  { name: '慢性肝淤血', count: 1 },
+  { name: '慢性肺淤血', count: 2 },
+  { name: '慢性萎缩性胃炎', count: 2 },
+  { name: '慢性阻塞性肺气肿', count: 1 },
+  { name: '新月体性肾小球肾炎', count: 2 },
+  { name: '流脑', count: 1 },
+  { name: '淋巴结干酪样坏死', count: 2 },
+  { name: '淋巴结转移性腺癌', count: 2 },
+  { name: '瘢痕组织', count: 1 },
+  { name: '皮肤乳头状瘤', count: 1 },
+  { name: '皮肤鳞状细胞癌', count: 1 },
+  { name: '硅肺', count: 1 },
+  { name: '纤维素性心包炎', count: 1 },
+  { name: '结节性甲状腺肿', count: 1 },
+  { name: '肉芽组织', count: 1 },
+  { name: '肝细胞癌', count: 2 },
+  { name: '肝细胞脂肪变', count: 2 },
+  { name: '肺出血性梗死', count: 2 },
+  { name: '肺粟粒性结核', count: 2 },
+  { name: '肾贫血性梗死', count: 1 },
+  { name: '胃溃疡', count: 3 },
+  { name: '胃腺癌', count: 2 },
+  { name: '脂肪瘤', count: 1 },
+  { name: '蜂窝织炎性阑尾炎', count: 2 },
+  { name: '门脉性肝硬化', count: 2 },
+  { name: '静脉混合血栓', count: 1 },
+  { name: '风湿性心肌炎', count: 2 }
+];
+
+const IMAGE_DIR = 'pathology_images';
+const CROP_PIXEL = 80;
+const TEN_QUESTION_COUNT = 10;
+
+const loadingScreen = document.getElementById('loadingScreen');
+const quizScreen = document.getElementById('quizScreen');
+const resultScreen = document.getElementById('resultScreen');
+const modePanel = document.getElementById('modePanel');
+const loadStatus = document.getElementById('loadStatus');
+const loadProgressBar = document.getElementById('loadProgressBar');
+
+const questionCanvas = document.getElementById('questionCanvas');
+const optionsContainer = document.getElementById('optionsContainer');
+const explanationBox = document.getElementById('explanationBox');
+const explanationContent = document.getElementById('explanationContent');
+const progressText = document.getElementById('progressText');
+const statsText = document.getElementById('statsText');
+const nextBtn = document.getElementById('nextBtn');
+const backBtn = document.getElementById('backBtn');
+const restartBtn = document.getElementById('restartBtn');
+const changeModeBtn = document.getElementById('changeModeBtn');
+const imageContainer = document.getElementById('imageContainer');
+const imageModal = document.getElementById('imageModal');
+const modalCanvas = document.getElementById('modalCanvas');
+const modalClose = document.getElementById('modalClose');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const resultStats = document.getElementById('resultStats');
+
+const modeInfinite = document.getElementById('modeInfinite');
+const modeTen = document.getElementById('modeTen');
+
+let allNames = PATHOLOGY_LIST.map(p => p.name);
+let currentQuiz = [];
+let currentQuestionIndex = 0;
+let correctCount = 0;
+let totalCount = 0;
+let answered = false;
+let loadedImages = {};
+let currentMode = 'infinite';
+
+function getImagePath(name, index) {
+  const item = PATHOLOGY_LIST.find(p => p.name === name);
+  if (!item) return null;
+  if (item.count === 1) {
+    return `${IMAGE_DIR}/${name}.png`;
+  } else {
+    return `${IMAGE_DIR}/${name}${index}.png`;
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('无法加载: ' + src));
+    img.src = src;
+  });
+}
+
+function cropImageTop(img) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const cropHeight = Math.min(CROP_PIXEL, img.height - 1);
+  canvas.width = img.width;
+  canvas.height = img.height - cropHeight;
+  ctx.drawImage(img, 0, cropHeight, img.width, img.height - cropHeight, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function preloadImages() {
+  loadedImages = {};
+  const total = PATHOLOGY_LIST.reduce((s, p) => s + p.count, 0);
+  let loaded = 0;
+
+  for (const item of PATHOLOGY_LIST) {
+    loadedImages[item.name] = [];
+    for (let i = 1; i <= item.count; i++) {
+      const path = getImagePath(item.name, i);
+      try {
+        const img = await loadImage(path);
+        loadedImages[item.name].push(img);
+      } catch (e) {
+        console.warn(e.message);
+      }
+      loaded++;
+      loadProgressBar.style.width = (loaded / total * 100) + '%';
+      loadStatus.textContent = `正在加载图片... ${loaded} / ${total}`;
+    }
+  }
+
+  const loadedCount = Object.values(loadedImages).reduce((s, arr) => s + arr.length, 0);
+  return loadedCount > 0;
+}
+
+function drawCroppedToCanvas(sourceCanvas, targetCanvas) {
+  targetCanvas.width = sourceCanvas.width;
+  targetCanvas.height = sourceCanvas.height;
+  const ctx = targetCanvas.getContext('2d');
+  ctx.drawImage(sourceCanvas, 0, 0);
+}
+
+function makeOneQuestion() {
+  const shuffledNames = [...allNames].sort(() => Math.random() - 0.5);
+  for (const name of shuffledNames) {
+    const available = loadedImages[name] || [];
+    if (available.length === 0) continue;
+    const imgIdx = Math.floor(Math.random() * available.length);
+    const originalImg = available[imgIdx];
+    const croppedCanvas = cropImageTop(originalImg);
+    const wrongOptions = allNames.filter(n => n !== name).sort(() => Math.random() - 0.5).slice(0, 4);
+    const allOptions = [name, ...wrongOptions].sort(() => Math.random() - 0.5);
+    return { correctName: name, imageCanvas: croppedCanvas, options: allOptions };
+  }
+  return null;
+}
+
+function generateQuiz() {
+  currentQuiz = [];
+  if (currentMode === 'ten') {
+    for (let i = 0; i < TEN_QUESTION_COUNT; i++) {
+      const q = makeOneQuestion();
+      if (q) currentQuiz.push(q);
+    }
+  }
+}
+
+function renderQuestion() {
+  answered = false;
+  let q;
+
+  if (currentMode === 'infinite') {
+    q = makeOneQuestion();
+    if (!q) return;
+    currentQuiz.push(q);
+    currentQuestionIndex = currentQuiz.length - 1;
+  } else {
+    q = currentQuiz[currentQuestionIndex];
+    if (!q) { showResults(); return; }
+  }
+
+  explanationBox.classList.remove('show');
+  nextBtn.style.display = 'none';
+
+  if (currentMode === 'infinite') {
+    progressText.textContent = `第 ${totalCount + 1} 题`;
+    const pct = totalCount > 0 ? (correctCount / totalCount * 100).toFixed(0) : 0;
+    statsText.textContent = `正确: ${correctCount} (${pct}%)`;
+  } else {
+    progressText.textContent = `${currentQuestionIndex + 1} / ${currentQuiz.length}`;
+    statsText.textContent = `正确: ${correctCount}`;
+  }
+
+  drawCroppedToCanvas(q.imageCanvas, questionCanvas);
+
+  optionsContainer.innerHTML = '';
+  const labels = ['A', 'B', 'C', 'D', 'E'];
+  q.options.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-btn';
+    btn.innerHTML = `<span class="option-label">${labels[idx]}.</span>${opt}`;
+    btn.onclick = () => selectOption(idx, btn);
+    optionsContainer.appendChild(btn);
+  });
+
+  setTimeout(() => {
+    window.scrollTo(0, 0);
+  }, 50);
+}
+
+function selectOption(idx, btn) {
+  if (answered) return;
+  answered = true;
+
+  let q;
+  if (currentMode === 'infinite') {
+    q = currentQuiz[currentQuiz.length - 1];
+  } else {
+    q = currentQuiz[currentQuestionIndex];
+  }
+
+  const selected = q.options[idx];
+  const isCorrect = selected === q.correctName;
+
+  const allBtns = optionsContainer.querySelectorAll('.option-btn');
+  allBtns.forEach(b => b.disabled = true);
+
+  if (isCorrect) {
+    btn.classList.add('correct');
+    correctCount++;
+    explanationContent.innerHTML = `✅ 正确！是 <b>${q.correctName}</b>`;
+  } else {
+    btn.classList.add('wrong');
+    const correctIdx = q.options.indexOf(q.correctName);
+    if (correctIdx >= 0) allBtns[correctIdx].classList.add('correct');
+    explanationContent.innerHTML = `❌ 你选了 <b>${selected}</b><br>✅ 正确是 <b>${q.correctName}</b>`;
+  }
+  totalCount++;
+  explanationBox.classList.add('show');
+
+  if (currentMode === 'infinite') {
+    const pct = (correctCount / totalCount * 100).toFixed(0);
+    statsText.textContent = `正确: ${correctCount} (${pct}%)`;
+    nextBtn.textContent = '下一题 →';
+    nextBtn.style.display = 'inline-block';
+  } else {
+    statsText.textContent = `正确: ${correctCount}`;
+    if (currentQuestionIndex < currentQuiz.length - 1) {
+      nextBtn.textContent = '下一题 →';
+    } else {
+      nextBtn.textContent = '查看报告 🎯';
+    }
+    nextBtn.style.display = 'inline-block';
+  }
+}
+
+function showResults() {
+  quizScreen.style.display = 'none';
+  resultScreen.style.display = 'block';
+
+  scoreDisplay.textContent = `${correctCount} / ${totalCount}`;
+  const pct = totalCount > 0 ? (correctCount / totalCount * 100) : 0;
+  scoreDisplay.className = 'score-display ' + (pct >= 80 ? 'excellent' : (pct >= 60 ? 'good' : 'poor'));
+
+  let summary = '';
+  if (pct >= 80) summary = '🌟 优秀！病理识别能力很强！';
+  else if (pct >= 60) summary = '👍 不错！继续努力！';
+  else summary = '📚 需要多加复习哦！';
+  resultStats.innerHTML = `共 ${totalCount} 题<br>正确率：<b>${pct.toFixed(1)}%</b><br>${summary}`;
+}
+
+function showQuiz() {
+  loadingScreen.style.display = 'none';
+  resultScreen.style.display = 'none';
+  quizScreen.style.display = 'block';
+  currentQuestionIndex = 0;
+  correctCount = 0;
+  totalCount = 0;
+  if (currentMode === 'infinite') {
+    currentQuiz = [];
+  }
+  renderQuestion();
+}
+
+function showModeSelect() {
+  quizScreen.style.display = 'none';
+  resultScreen.style.display = 'none';
+  loadingScreen.style.display = 'block';
+  modePanel.style.display = 'block';
+  loadProgressBar.style.display = 'none';
+  loadStatus.style.display = 'none';
+}
+
+nextBtn.onclick = () => {
+  if (currentMode === 'infinite') {
+    renderQuestion();
+  } else {
+    currentQuestionIndex++;
+    if (currentQuestionIndex >= currentQuiz.length) {
+      showResults();
+    } else {
+      renderQuestion();
+    }
+  }
+};
+
+backBtn.onclick = showModeSelect;
+changeModeBtn.onclick = showModeSelect;
+
+restartBtn.onclick = () => {
+  resultScreen.style.display = 'none';
+  currentQuestionIndex = 0;
+  correctCount = 0;
+  totalCount = 0;
+  if (currentMode === 'ten') {
+    generateQuiz();
+  } else {
+    currentQuiz = [];
+  }
+  showQuiz();
+};
+
+imageContainer.onclick = () => {
+  let q;
+  if (currentMode === 'infinite') {
+    q = currentQuiz[currentQuiz.length - 1];
+  } else {
+    q = currentQuiz[currentQuestionIndex];
+  }
+  if (q) {
+    drawCroppedToCanvas(q.imageCanvas, modalCanvas);
+    imageModal.classList.add('show');
+  }
+};
+
+function closeModal() {
+  imageModal.classList.remove('show');
+}
+modalClose.onclick = closeModal;
+imageModal.onclick = (e) => { if (e.target === imageModal) closeModal(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+modeInfinite.onclick = () => {
+  currentMode = 'infinite';
+  showQuiz();
+};
+modeTen.onclick = () => {
+  currentMode = 'ten';
+  generateQuiz();
+  currentQuestionIndex = 0;
+  correctCount = 0;
+  totalCount = 0;
+  showQuiz();
+};
+
+// 自动加载
+(async function init() {
+  const ok = await preloadImages();
+  if (!ok) {
+    loadStatus.textContent = '❌ 加载失败。请确认 pathology_images 文件夹与本 HTML 在同一目录下！';
+    loadStatus.classList.add('error');
+    loadProgressBar.style.display = 'none';
+    return;
+  }
+  const loadedCount = Object.values(loadedImages).reduce((s, arr) => s + arr.length, 0);
+  loadStatus.textContent = `✅ 已加载 ${loadedCount} 张图片，请选择模式`;
+  loadProgressBar.style.display = 'none';
+  modePanel.style.display = 'block';
+})();
+</script>
+</body>
+</html>
